@@ -1,0 +1,35 @@
+{
+  "position_id": "opening-direction-example",
+  "move": "Q4",
+  "move_role": [
+    "direction_of_play",
+    "katago_top_choice",
+    "territory_shift"
+  ],
+  "local_tactics": [
+    "follow_up_sequence"
+  ],
+  "global_context": [
+    "opening",
+    "close_game"
+  ],
+  "main_reason": "The move fits the opening direction of play according to the candidate ordering. The strongest visible ownership changes are in lower_right.",
+  "bad_if_ignored": "The opponent may take the key area indicated by the ownership swing.",
+  "evidence": {
+    "candidate_vertex": "Q4",
+    "candidate_rank": 1,
+    "winrate_delta": 0.0,
+    "score_delta": 0.0,
+    "visits": 824,
+    "pv_reference": [
+      "Q4",
+      "D16",
+      "K16",
+      "C14"
+    ],
+    "ownership_regions": [
+      "lower_right"
+    ]
+  },
+  "confidence": 0.85
+}

@@ -1,0 +1,90 @@
+# go-semantic-annotator
+
+Structured Go move semantics from KataGo analysis.
+
+This repo is the third component beside `katago-server` and `stonehearts`:
+
+- `katago-server` owns KataGo process management and raw analysis.
+- `go-semantic-annotator` owns normalized inputs, labels, datasets, evals, and model experiments.
+- `stonehearts` consumes the resulting JSON to render explanations.
+
+The project goal is not to train an LLM to play Go. KataGo remains the source of
+truth. This repo trains and evaluates a small model that translates KataGo-derived
+facts into constrained semantic JSON.
+
+## Current Scope
+
+The initial version includes:
+
+- Pydantic schemas for normalized KataGo position analysis and semantic output.
+- A deterministic baseline annotator to establish the contract.
+- A CLI for validation, normalization, and baseline annotation.
+- Example input/output fixtures.
+- A starter label taxonomy.
+
+## Quick Start
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+pytest
+```
+
+Validate the example payloads:
+
+```bash
+go-semantic-annotator validate-input examples/katago_position.json
+go-semantic-annotator validate-output examples/semantic_annotation.json
+```
+
+Run the baseline annotator:
+
+```bash
+go-semantic-annotator annotate \
+  examples/katago_position.json \
+  outputs/example_annotation.json
+```
+
+## Data Contract
+
+Input:
+
+```text
+KataGoPositionAnalysis
+  context
+  move_history
+  root winrate / score / score stdev
+  candidate moves with policy, visits, winrate, score, and PV
+  optional compact ownership deltas
+```
+
+Output:
+
+```text
+SemanticAnnotation
+  move_role
+  local_tactics
+  global_context
+  main_reason
+  bad_if_ignored
+  evidence
+  confidence
+```
+
+See `examples/` and `docs/taxonomy.md`.
+
+## Suggested Roadmap
+
+1. Expand `normalize.py` to consume the exact payloads emitted by `katago-server`.
+2. Add derived features: ownership summaries, group safety, liberties, eyespace, and phase.
+3. Build a small expert eval set before generating large synthetic data.
+4. Add annotation tooling for expert corrections.
+5. Train LoRA/QLoRA adapters for Qwen small models.
+6. Add an inference service once the JSON schema stabilizes.
+
+## Artifact Policy
+
+Do not commit large generated datasets, model weights, or training runs. Keep this repo
+for code, schemas, configs, docs, and small fixtures. Store larger artifacts in external
+storage, Hugging Face, DVC, or Git LFS.

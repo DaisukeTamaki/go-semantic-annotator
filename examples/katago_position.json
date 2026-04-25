@@ -1,0 +1,61 @@
+{
+  "id": "opening-direction-example",
+  "context": {
+    "game_phase": "opening",
+    "side_to_move": "b",
+    "board_size": 19,
+    "move_number": 17,
+    "komi": 6.5,
+    "score_context": "close_game"
+  },
+  "move_history": [
+    {
+      "color": "b",
+      "vertex": "D4",
+      "row": 3,
+      "col": 3
+    },
+    {
+      "color": "w",
+      "vertex": "Q16",
+      "row": 15,
+      "col": 15
+    }
+  ],
+  "root_winrate": 0.528,
+  "root_score_lead": 1.6,
+  "root_score_stdev": 8.4,
+  "candidates": [
+    {
+      "vertex": "Q4",
+      "rank": 1,
+      "visits": 824,
+      "policy": 0.31,
+      "winrate": 0.528,
+      "score_lead": 1.6,
+      "score_stdev": 8.4,
+      "pv": ["Q4", "D16", "K16", "C14"],
+      "source": "katago"
+    },
+    {
+      "vertex": "D16",
+      "rank": 2,
+      "visits": 391,
+      "policy": 0.24,
+      "winrate": 0.517,
+      "score_lead": 0.9,
+      "score_stdev": 8.6,
+      "pv": ["D16", "Q4", "K4"],
+      "source": "katago"
+    }
+  ],
+  "ownership_deltas": [
+    {
+      "region": "lower_right",
+      "before": 0.12,
+      "after": 0.76,
+      "delta": 0.64
+    }
+  ],
+  "raw": {}
+}
