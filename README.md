@@ -74,14 +74,25 @@ SemanticAnnotation
 
 See `examples/` and `docs/taxonomy.md`.
 
+## Pairwise Comparisons
+
+A later core task is explaining why KataGo prefers move line A over a
+human-preferred move line B. The plan is to first make single-line annotations reliable,
+then add an explicit pairwise comparison schema and train it on expert-verified
+A-vs-B examples. The frontier LLM should use that structured comparison for prose, not
+invent the relationship itself.
+
+See `docs/pairwise_comparison_plan.md`.
+
 ## Suggested Roadmap
 
 1. Expand `normalize.py` to consume the exact payloads emitted by `katago-server`.
 2. Add derived features: ownership summaries, group safety, liberties, eyespace, and phase.
 3. Build a small expert eval set before generating large synthetic data.
 4. Add annotation tooling for expert corrections.
-5. Train LoRA/QLoRA adapters for Qwen small models.
-6. Add an inference service once the JSON schema stabilizes.
+5. Add a pairwise comparison schema for KataGo top moves vs human-preferred alternatives.
+6. Train LoRA/QLoRA adapters for Qwen small models.
+7. Add an inference service once the JSON schema stabilizes.
 
 ## Artifact Policy
 
