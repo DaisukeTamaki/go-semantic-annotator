@@ -83,9 +83,10 @@ See `examples/` and `docs/taxonomy.md`.
 
 ## Manual Annotation
 
-Use the local annotation app to load normalized positions, inspect candidate moves, write
-expert semantic labels, and export validated JSONL rows. This is intended as the fast
-internal dataset tool before any deeper `stonehearts` UI integration.
+Use the local annotation app to load normalized positions, try moves on the board,
+refresh live `katago-server` analysis, write expert semantic labels, and export
+validated JSONL rows. This is intended as the fast internal dataset tool before any
+deeper `stonehearts` UI integration.
 
 See `docs/manual_annotation_app.md`.
 

@@ -261,8 +261,12 @@ INDEX_HTML = r"""<!doctype html>
       min-width: 0;
       min-height: 0;
       overflow: hidden;
+      cursor: pointer;
       font-size: 11px;
       color: rgba(0, 0, 0, 0.55);
+    }
+    .cell:hover {
+      background: rgba(255, 255, 255, 0.12);
     }
     .cell::before,
     .cell::after {
@@ -358,6 +362,13 @@ INDEX_HTML = r"""<!doctype html>
       border-radius: 8px;
       background: #111827;
     }
+    .toolbar {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 8px;
+      margin: 12px 0;
+      align-items: end;
+    }
   </style>
 </head>
 <body>
@@ -376,6 +387,16 @@ INDEX_HTML = r"""<!doctype html>
     <section class="card">
       <h2>Position</h2>
       <div id="status" class="muted">Loading...</div>
+      <div class="toolbar">
+        <label>KataGo WS URL <input id="katago-url" value="ws://127.0.0.1:8000/ws/analyze" /></label>
+        <label>Visits <input id="max-visits" type="number" min="1" value="200" /></label>
+        <button id="refresh-analysis" class="secondary">Refresh Analysis</button>
+      </div>
+      <div class="toolbar">
+        <label>Side to play <input id="side-to-play" readonly /></label>
+        <button id="reset-line" class="secondary">Reset Line</button>
+        <span class="muted">Click an empty intersection to try a move.</span>
+      </div>
       <div id="board" class="board"></div>
       <h3>Candidates</h3>
       <div id="candidates" class="candidate-list"></div>
@@ -398,8 +419,13 @@ INDEX_HTML = r"""<!doctype html>
   </main>
 
   <script>
+    const COLUMNS = "ABCDEFGHJKLMNOPQRSTUVWXYZ";
     let currentPosition = null;
+    let basePosition = null;
+    let trialMoves = [];
     let selectedCandidate = null;
+    let katagoSocket = null;
+    let pendingQueryId = null;
 
     const $ = (id) => document.getElementById(id);
     const csv = (value) => value.split(",").map((x) => x.trim()).filter(Boolean);
@@ -410,7 +436,9 @@ INDEX_HTML = r"""<!doctype html>
         $("status").textContent = await response.text();
         return;
       }
-      currentPosition = await response.json();
+      basePosition = await response.json();
+      currentPosition = structuredClone(basePosition);
+      trialMoves = structuredClone(currentPosition.move_history || []);
       selectedCandidate = currentPosition.candidates[0] || null;
       renderPosition();
       prefillFromCandidate();
@@ -419,6 +447,7 @@ INDEX_HTML = r"""<!doctype html>
     function renderPosition() {
       $("status").textContent = `${currentPosition.id} | ${currentPosition.context.game_phase} | move ${currentPosition.context.move_number ?? "?"}`;
       $("raw").textContent = JSON.stringify(currentPosition, null, 2);
+      $("side-to-play").value = nextColor();
       renderBoard();
       renderCandidates();
     }
@@ -429,7 +458,7 @@ INDEX_HTML = r"""<!doctype html>
       board.style.gridTemplateColumns = `repeat(${size}, 1fr)`;
       board.style.gridTemplateRows = `repeat(${size}, 1fr)`;
       board.innerHTML = "";
-      const stones = new Map(currentPosition.move_history.map((move) => [`${move.row},${move.col}`, move]));
+      const stones = new Map(trialMoves.map((move) => [`${move.row},${move.col}`, move]));
       const candidates = new Map(currentPosition.candidates.map((move) => [vertexToKey(move.vertex, size), move]));
       for (let row = size - 1; row >= 0; row--) {
         for (let col = 0; col < size; col++) {
@@ -439,6 +468,7 @@ INDEX_HTML = r"""<!doctype html>
           if (col === size - 1) cell.classList.add("edge-right");
           if (row === size - 1) cell.classList.add("edge-top");
           if (row === 0) cell.classList.add("edge-bottom");
+          cell.onclick = () => playMove(row, col);
           const stone = stones.get(`${row},${col}`);
           const candidate = candidates.get(`${row},${col}`);
           if (stone) {
@@ -479,13 +509,120 @@ INDEX_HTML = r"""<!doctype html>
       $("bad-if-ignored").value = "";
     }
 
+    function playMove(row, col) {
+      if (!currentPosition) return;
+      if (trialMoves.some((move) => move.row === row && move.col === col)) return;
+      const move = {
+        color: nextColor(),
+        vertex: pointToVertex(row, col),
+        row,
+        col
+      };
+      trialMoves.push(move);
+      currentPosition.move_history = structuredClone(trialMoves);
+      currentPosition.context.side_to_move = nextColor();
+      currentPosition.context.move_number = trialMoves.length;
+      renderPosition();
+      refreshAnalysis();
+    }
+
+    function resetLine() {
+      if (!basePosition) return;
+      currentPosition = structuredClone(basePosition);
+      trialMoves = structuredClone(currentPosition.move_history || []);
+      selectedCandidate = currentPosition.candidates[0] || null;
+      renderPosition();
+      prefillFromCandidate();
+    }
+
+    function nextColor() {
+      const baseColor = basePosition?.context?.side_to_move || currentPosition?.context?.side_to_move || "b";
+      const baseCount = basePosition?.move_history?.length || 0;
+      const played = Math.max(0, trialMoves.length - baseCount);
+      if (played % 2 === 0) return baseColor;
+      return baseColor === "b" ? "w" : "b";
+    }
+
+    function pointToVertex(row, col) {
+      return `${COLUMNS[col]}${row + 1}`;
+    }
+
     function vertexToKey(vertex, size) {
       if (!vertex || vertex.toLowerCase() === "pass") return "";
-      const columns = "ABCDEFGHJKLMNOPQRSTUVWXYZ";
-      const col = columns.indexOf(vertex[0].toUpperCase());
+      const col = COLUMNS.indexOf(vertex[0].toUpperCase());
       const row = Number.parseInt(vertex.slice(1), 10) - 1;
       if (col < 0 || Number.isNaN(row) || row < 0 || row >= size) return "";
       return `${row},${col}`;
+    }
+
+    function movesForKatago() {
+      return trialMoves.map((move) => ({
+        color: move.color,
+        position: [move.row, move.col]
+      }));
+    }
+
+    function refreshAnalysis() {
+      if (!currentPosition) return;
+      const url = $("katago-url").value.trim();
+      const queryId = `annotation-${Date.now()}`;
+      pendingQueryId = queryId;
+      $("status").textContent = `Requesting KataGo analysis for ${trialMoves.length} moves...`;
+
+      const sendQuery = () => {
+        katagoSocket.send(JSON.stringify({
+          id: queryId,
+          moves: movesForKatago(),
+          komi: currentPosition.context.komi,
+          board_size_x: currentPosition.context.board_size,
+          board_size_y: currentPosition.context.board_size,
+          analyze_turns: [trialMoves.length],
+          max_visits: Number.parseInt($("max-visits").value, 10),
+          include_policy: true,
+          include_ownership: true
+        }));
+      };
+
+      if (!katagoSocket || katagoSocket.readyState === WebSocket.CLOSED) {
+        katagoSocket = new WebSocket(url);
+        katagoSocket.onopen = sendQuery;
+        katagoSocket.onerror = () => {
+          $("status").textContent = `Could not connect to ${url}`;
+        };
+        katagoSocket.onmessage = (event) => handleKatagoResponse(JSON.parse(event.data));
+        return;
+      }
+
+      if (katagoSocket.readyState === WebSocket.CONNECTING) {
+        katagoSocket.addEventListener("open", sendQuery, {once: true});
+        return;
+      }
+
+      sendQuery();
+    }
+
+    function handleKatagoResponse(response) {
+      if (!currentPosition || response.id !== pendingQueryId || response.isDuringSearch) return;
+      currentPosition.id = response.id;
+      currentPosition.root_winrate = response.rootInfo?.winrate ?? null;
+      currentPosition.root_score_lead = response.rootInfo?.scoreLead ?? null;
+      currentPosition.root_score_stdev = response.rootInfo?.scoreStdev ?? null;
+      currentPosition.candidates = (response.moveInfos || []).map((moveInfo, index) => ({
+        vertex: moveInfo.move,
+        rank: index + 1,
+        visits: moveInfo.visits ?? null,
+        policy: moveInfo.prior ?? null,
+        winrate: moveInfo.winrate ?? null,
+        score_lead: moveInfo.scoreLead ?? null,
+        score_stdev: moveInfo.scoreStdev ?? null,
+        pv: moveInfo.pv || [],
+        source: "katago_live"
+      }));
+      currentPosition.raw = response;
+      selectedCandidate = currentPosition.candidates[0] || null;
+      renderPosition();
+      prefillFromCandidate();
+      $("status").textContent = `Live KataGo analysis updated for ${trialMoves.length} moves`;
     }
 
     async function saveAnnotation() {
@@ -531,6 +668,8 @@ INDEX_HTML = r"""<!doctype html>
 
     $("load-random").onclick = loadRandom;
     $("save").onclick = saveAnnotation;
+    $("refresh-analysis").onclick = refreshAnalysis;
+    $("reset-line").onclick = resetLine;
     loadRandom();
   </script>
 </body>

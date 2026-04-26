@@ -16,6 +16,15 @@ By default, the app:
 - opens `http://127.0.0.1:8765`
 - writes validated JSONL records to `datasets/manual_annotations.jsonl`
 
+For live analysis, run `katago-server` separately:
+
+```bash
+katago-server serve
+```
+
+The browser app connects directly to `ws://127.0.0.1:8000/ws/analyze` by default. You
+can edit the WebSocket URL in the app if `katago-server` is running somewhere else.
+
 Custom paths:
 
 ```bash
@@ -28,12 +37,18 @@ go-semantic-annotator annotation-app \
 
 1. Load a random normalized `KataGoPositionAnalysis` JSON file.
 2. Show a simple board, move history, and KataGo candidate moves.
-3. Select a candidate.
-4. Fill semantic labels and short expert explanation fields.
-5. Save a validated `ManualAnnotationRecord` row to JSONL.
+3. Click empty intersections to try moves on the board.
+4. Refresh live KataGo analysis for the current trial line.
+5. Select a candidate from the updated analysis.
+6. Fill semantic labels and short expert explanation fields.
+7. Save a validated `ManualAnnotationRecord` row to JSONL.
 
 The app validates both the input position and output annotation with the repo's Pydantic
 schemas before export.
+
+Use `Reset Line` to return to the loaded position. The current version sends the full
+trial move list as `moves` to `katago-server`, so queued positions should eventually
+include complete game history when live analysis quality matters.
 
 ## Export Shape
 
@@ -59,7 +74,6 @@ Keep this app focused on dataset creation, not polished end-user explanation.
 Near-term improvements:
 
 - Load positions from SGF files and sample random turns.
-- Request fresh analysis from `katago-server`.
 - Display principal variations on the board.
 - Add ownership and score-delta visualizations.
 - Add keyboard-first labeling for repeated expert work.
