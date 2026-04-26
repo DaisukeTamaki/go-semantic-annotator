@@ -6,6 +6,7 @@ from typing import Annotated
 
 import typer
 
+from go_semantic_annotator.annotation_app import run_annotation_app
 from go_semantic_annotator.annotator import annotate_position
 from go_semantic_annotator.models import KataGoPositionAnalysis, SemanticAnnotation
 from go_semantic_annotator.normalize import normalize_katago_response
@@ -60,6 +61,31 @@ def annotate(
     annotation = annotate_position(position, candidate_rank=candidate_rank)
     _write_json(output_path, annotation.model_dump(mode="json"))
     typer.echo(f"wrote {output_path}")
+
+
+@app.command()
+def annotation_app(
+    queue_dir: Annotated[
+        Path,
+        typer.Option(help="Directory containing normalized position JSON files."),
+    ] = Path("examples"),
+    output_path: Annotated[
+        Path,
+        typer.Option(help="JSONL file for exported manual annotations."),
+    ] = Path("datasets/manual_annotations.jsonl"),
+    host: Annotated[str, typer.Option(help="Local host to bind.")] = "127.0.0.1",
+    port: Annotated[int, typer.Option(help="Local port to bind.")] = 8765,
+    open_browser: Annotated[bool, typer.Option(help="Open the app in a browser.")] = True,
+) -> None:
+    """Launch the lightweight manual annotation web app."""
+
+    run_annotation_app(
+        queue_dir=queue_dir,
+        output_path=output_path,
+        host=host,
+        port=port,
+        open_browser=open_browser,
+    )
 
 
 def _read_json(path: Path) -> dict:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -109,3 +110,16 @@ class SemanticAnnotation(BaseModel):
     bad_if_ignored: str | None = None
     evidence: Evidence
     confidence: float = Field(ge=0.0, le=1.0)
+
+
+class ManualAnnotationRecord(BaseModel):
+    """One expert-authored dataset row exported by the annotation app."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    record_id: str
+    position: KataGoPositionAnalysis
+    annotation: SemanticAnnotation
+    annotator: str | None = None
+    notes: str | None = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

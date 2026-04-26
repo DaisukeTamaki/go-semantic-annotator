@@ -19,6 +19,7 @@ The initial version includes:
 - Pydantic schemas for normalized KataGo position analysis and semantic output.
 - A deterministic baseline annotator to establish the contract.
 - A CLI for validation, normalization, and baseline annotation.
+- A lightweight local manual annotation app for expert JSONL dataset creation.
 - Example input/output fixtures.
 - A starter label taxonomy.
 
@@ -44,6 +45,12 @@ Run the baseline annotator:
 go-semantic-annotator annotate \
   examples/katago_position.json \
   outputs/example_annotation.json
+```
+
+Launch the manual annotation app:
+
+```bash
+go-semantic-annotator annotation-app
 ```
 
 ## Data Contract
@@ -73,6 +80,14 @@ SemanticAnnotation
 ```
 
 See `examples/` and `docs/taxonomy.md`.
+
+## Manual Annotation
+
+Use the local annotation app to load normalized positions, inspect candidate moves, write
+expert semantic labels, and export validated JSONL rows. This is intended as the fast
+internal dataset tool before any deeper `stonehearts` UI integration.
+
+See `docs/manual_annotation_app.md`.
 
 ## Pairwise Comparisons
 
