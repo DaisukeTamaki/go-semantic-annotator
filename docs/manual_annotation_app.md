@@ -50,6 +50,36 @@ Use `Reset Line` to return to the loaded position. The current version sends the
 trial move list as `moves` to `katago-server`, so queued positions should eventually
 include complete game history when live analysis quality matters.
 
+## Move References
+
+Use Markdown links with `move:` targets when annotation text refers to a board point:
+
+```md
+[R3](move:R3) is larger globally than [R14](move:R14).
+```
+
+The app shows the current target field beside the annotation header. Two ways to
+insert a move link into that target field:
+
+- **Pick Mode**: click `Insert Move Link`, then click any board intersection.
+  ESC cancels. The board border turns amber while pick mode is active.
+- **Right-click on a board intersection**: choose `Insert link into focused field` or
+  `Copy link to clipboard`.
+
+If text is selected in the target field, that text becomes the link label.
+
+The board shows a small hover label with the vertex name (for example `Q4`) while
+pick mode is active.
+
+When you save, the app warns if any `move:XYZ` reference is not a legal coordinate
+for the current board.
+
+Clicking a candidate row in the candidate list plays that candidate as a trial move,
+the same as clicking the corresponding intersection on the board.
+
+Store the Markdown as-is in manual annotations. Export scripts can later parse `move:`
+links into structured reference metadata for board hover/highlight behavior.
+
 ## Export Shape
 
 Each JSONL row is:

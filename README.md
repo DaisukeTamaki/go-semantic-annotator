@@ -88,6 +88,9 @@ refresh live `katago-server` analysis, write expert semantic labels, and export
 validated JSONL rows. This is intended as the fast internal dataset tool before any
 deeper `stonehearts` UI integration.
 
+Annotation text can reference board points with Markdown links such as
+`[R3](move:R3)`, which future UIs can parse for hover/highlight behavior.
+
 See `docs/manual_annotation_app.md`.
 
 ## Pairwise Comparisons

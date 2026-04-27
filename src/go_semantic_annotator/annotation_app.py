@@ -326,6 +326,73 @@ INDEX_HTML = r"""<!doctype html>
       color: #1d4ed8;
       font-weight: 700;
     }
+    .hover-label {
+      position: absolute;
+      z-index: 2;
+      bottom: 100%;
+      left: 50%;
+      transform: translate(-50%, -4px);
+      padding: 2px 6px;
+      border-radius: 6px;
+      background: #0b1020;
+      color: #f9fafb;
+      font-size: 11px;
+      pointer-events: none;
+      white-space: nowrap;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+    }
+    .board.pick-mode {
+      box-shadow: 0 0 0 4px #f59e0b inset;
+    }
+    .board.pick-mode .cell {
+      cursor: crosshair;
+    }
+    .pick-banner {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      margin: 12px 0;
+      background: #78350f;
+      color: #fef3c7;
+      border-radius: 8px;
+      font-weight: 600;
+    }
+    .pick-banner.visible {
+      display: flex;
+    }
+    .context-menu {
+      position: fixed;
+      z-index: 9999;
+      background: #0b1020;
+      border: 1px solid #374151;
+      border-radius: 8px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+      padding: 4px;
+      display: none;
+      min-width: 180px;
+    }
+    .context-menu.visible {
+      display: block;
+    }
+    .context-menu button {
+      display: block;
+      width: 100%;
+      text-align: left;
+      background: transparent;
+      border: none;
+      color: #f9fafb;
+      padding: 8px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .context-menu button:hover {
+      background: #1f2937;
+    }
+    .candidate-row.active {
+      outline: 2px solid #2563eb;
+      outline-offset: 2px;
+    }
     label {
       display: grid;
       gap: 6px;
@@ -369,6 +436,12 @@ INDEX_HTML = r"""<!doctype html>
       margin: 12px 0;
       align-items: end;
     }
+    .section-heading {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
   </style>
 </head>
 <body>
@@ -395,7 +468,10 @@ INDEX_HTML = r"""<!doctype html>
       <div class="toolbar">
         <label>Side to play <input id="side-to-play" readonly /></label>
         <button id="reset-line" class="secondary">Reset Line</button>
-        <span class="muted">Click an empty intersection to try a move.</span>
+        <span class="muted">Click an empty intersection or a candidate to try a move.</span>
+      </div>
+      <div id="pick-banner" class="pick-banner">
+        <span>Pick Mode: click any intersection to insert a move link into <strong id="pick-target-name">Main reason</strong>. ESC to cancel.</span>
       </div>
       <div id="board" class="board"></div>
       <h3>Candidates</h3>
@@ -403,7 +479,15 @@ INDEX_HTML = r"""<!doctype html>
     </section>
 
     <section class="card">
-      <h2>Annotation</h2>
+      <div class="section-heading">
+        <h2>Annotation</h2>
+        <button id="insert-move-link" class="secondary">Insert Move Link</button>
+      </div>
+      <div class="muted">
+        Target field: <strong id="active-field-name">Main reason</strong>.
+        Move references use Markdown links like [R3](move:R3).
+        Right-click the board for Insert/Copy.
+      </div>
       <label>Annotator <input id="annotator" placeholder="optional" /></label>
       <label>Move <input id="move" /></label>
       <label>Move role CSV <input id="move-role" value="katago_top_choice" /></label>
@@ -418,6 +502,11 @@ INDEX_HTML = r"""<!doctype html>
     </section>
   </main>
 
+  <div id="context-menu" class="context-menu">
+    <button data-action="insert">Insert link into focused field</button>
+    <button data-action="copy">Copy link to clipboard</button>
+  </div>
+
   <script>
     const COLUMNS = "ABCDEFGHJKLMNOPQRSTUVWXYZ";
     let currentPosition = null;
@@ -426,9 +515,19 @@ INDEX_HTML = r"""<!doctype html>
     let selectedCandidate = null;
     let katagoSocket = null;
     let pendingQueryId = null;
+    let activeAnnotationField = null;
+    let pickMode = false;
+    let contextMenuTarget = null;
 
     const $ = (id) => document.getElementById(id);
     const csv = (value) => value.split(",").map((x) => x.trim()).filter(Boolean);
+    const annotationFieldLabels = {
+      "main-reason": "Main reason",
+      "bad-if-ignored": "Bad if ignored",
+      "notes": "Notes"
+    };
+    const annotationFieldIds = Object.keys(annotationFieldLabels);
+    const MOVE_LINK_PATTERN = /\[[^\]]*\]\(move:([^)]+)\)/g;
 
     async function loadRandom() {
       const response = await fetch("/api/tasks/random");
@@ -468,7 +567,14 @@ INDEX_HTML = r"""<!doctype html>
           if (col === size - 1) cell.classList.add("edge-right");
           if (row === size - 1) cell.classList.add("edge-top");
           if (row === 0) cell.classList.add("edge-bottom");
-          cell.onclick = () => playMove(row, col);
+          cell.dataset.row = row;
+          cell.dataset.col = col;
+          cell.dataset.vertex = pointToVertex(row, col);
+          cell.title = cell.dataset.vertex;
+          cell.onclick = (event) => handleBoardClick(event, row, col);
+          cell.oncontextmenu = (event) => openContextMenu(event, row, col);
+          cell.onmouseenter = () => showHoverLabel(cell);
+          cell.onmouseleave = () => hideHoverLabel(cell);
           const stone = stones.get(`${row},${col}`);
           const candidate = candidates.get(`${row},${col}`);
           if (stone) {
@@ -486,19 +592,53 @@ INDEX_HTML = r"""<!doctype html>
       }
     }
 
+    function showHoverLabel(cell) {
+      if (!pickMode) return;
+      if (cell.querySelector(".hover-label")) return;
+      const label = document.createElement("div");
+      label.className = "hover-label";
+      label.textContent = cell.dataset.vertex;
+      cell.appendChild(label);
+    }
+
+    function hideHoverLabel(cell) {
+      const label = cell.querySelector(".hover-label");
+      if (label) label.remove();
+    }
+
+    function handleBoardClick(event, row, col) {
+      const vertex = pointToVertex(row, col);
+      if (pickMode) {
+        event.preventDefault();
+        insertLinkAtCaret(vertex);
+        exitPickMode();
+        return;
+      }
+      playMove(row, col);
+    }
+
     function renderCandidates() {
       const container = $("candidates");
       container.innerHTML = "";
       currentPosition.candidates.forEach((candidate) => {
         const row = document.createElement("button");
         row.className = "candidate-row secondary";
+        if (selectedCandidate && selectedCandidate.vertex === candidate.vertex) {
+          row.classList.add("active");
+        }
         row.innerHTML = `<strong>#${candidate.rank} ${candidate.vertex}</strong><span>score ${candidate.score_lead ?? "?"}, winrate ${candidate.winrate ?? "?"}</span><span>${candidate.visits ?? 0} visits</span>`;
-        row.onclick = () => {
-          selectedCandidate = candidate;
-          prefillFromCandidate();
-        };
+        row.onclick = () => playCandidateMove(candidate);
         container.appendChild(row);
       });
+    }
+
+    function playCandidateMove(candidate) {
+      selectedCandidate = candidate;
+      prefillFromCandidate();
+      const key = vertexToKey(candidate.vertex, currentPosition.context.board_size);
+      if (!key) return;
+      const [row, col] = key.split(",").map((value) => Number.parseInt(value, 10));
+      playMove(row, col);
     }
 
     function prefillFromCandidate() {
@@ -507,6 +647,128 @@ INDEX_HTML = r"""<!doctype html>
       $("global-context").value = [currentPosition.context.game_phase].filter(Boolean).join(", ");
       $("main-reason").value = "";
       $("bad-if-ignored").value = "";
+    }
+
+    function trackAnnotationFocus() {
+      annotationFieldIds.forEach((id) => {
+        $(id).addEventListener("focus", (event) => {
+          setActiveAnnotationField(event.target);
+        });
+      });
+      setActiveAnnotationField($("main-reason"));
+    }
+
+    function setActiveAnnotationField(field) {
+      activeAnnotationField = field;
+      const label = annotationFieldLabels[field?.id] || "Main reason";
+      $("active-field-name").textContent = label;
+      $("pick-target-name").textContent = label;
+    }
+
+    function enterPickMode() {
+      if (!currentPosition) return;
+      pickMode = true;
+      $("board").classList.add("pick-mode");
+      $("pick-banner").classList.add("visible");
+      $("status").textContent = "Pick a board point to insert a move link. ESC to cancel.";
+    }
+
+    function exitPickMode() {
+      pickMode = false;
+      $("board").classList.remove("pick-mode");
+      $("pick-banner").classList.remove("visible");
+    }
+
+    function insertLinkAtCaret(vertex) {
+      const target = activeAnnotationField || $("main-reason");
+      const selectedText = target.value.slice(target.selectionStart, target.selectionEnd);
+      const label = selectedText || vertex;
+      const link = `[${label}](move:${vertex})`;
+      const before = target.value.slice(0, target.selectionStart);
+      const after = target.value.slice(target.selectionEnd);
+      target.value = `${before}${link}${after}`;
+      const cursor = before.length + link.length;
+      target.focus();
+      target.setSelectionRange(cursor, cursor);
+      $("status").textContent = `Inserted ${link} into ${annotationFieldLabels[target.id] || "field"}`;
+    }
+
+    async function copyLinkToClipboard(vertex) {
+      const link = `[${vertex}](move:${vertex})`;
+      try {
+        await navigator.clipboard.writeText(link);
+        $("status").textContent = `Copied ${link}`;
+      } catch (error) {
+        $("status").textContent = `Could not copy: ${error.message}`;
+      }
+    }
+
+    function openContextMenu(event, row, col) {
+      event.preventDefault();
+      const vertex = pointToVertex(row, col);
+      contextMenuTarget = vertex;
+      const menu = $("context-menu");
+      menu.style.left = `${event.clientX}px`;
+      menu.style.top = `${event.clientY}px`;
+      menu.classList.add("visible");
+    }
+
+    function closeContextMenu() {
+      $("context-menu").classList.remove("visible");
+      contextMenuTarget = null;
+    }
+
+    function setupContextMenu() {
+      const menu = $("context-menu");
+      menu.querySelectorAll("button").forEach((button) => {
+        button.onclick = () => {
+          if (!contextMenuTarget) {
+            closeContextMenu();
+            return;
+          }
+          if (button.dataset.action === "insert") {
+            insertLinkAtCaret(contextMenuTarget);
+          } else if (button.dataset.action === "copy") {
+            copyLinkToClipboard(contextMenuTarget);
+          }
+          closeContextMenu();
+        };
+      });
+      document.addEventListener("click", (event) => {
+        if (!menu.contains(event.target)) closeContextMenu();
+      });
+      document.addEventListener("scroll", closeContextMenu, true);
+    }
+
+    function setupKeyboard() {
+      window.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && pickMode) {
+          exitPickMode();
+        }
+      });
+    }
+
+    function extractMoveLinks(text) {
+      if (!text) return [];
+      const out = [];
+      const pattern = new RegExp(MOVE_LINK_PATTERN.source, "g");
+      let match;
+      while ((match = pattern.exec(text)) !== null) {
+        out.push(match[1]);
+      }
+      return out;
+    }
+
+    function isLegalVertex(vertex) {
+      if (!vertex) return false;
+      const size = currentPosition?.context?.board_size || 19;
+      return vertexToKey(vertex, size) !== "";
+    }
+
+    function collectInvalidMoveLinks() {
+      const fields = annotationFieldIds.map((id) => $(id).value);
+      const all = fields.flatMap(extractMoveLinks);
+      return all.filter((vertex) => !isLegalVertex(vertex));
     }
 
     function playMove(row, col) {
@@ -627,6 +889,16 @@ INDEX_HTML = r"""<!doctype html>
 
     async function saveAnnotation() {
       if (!currentPosition || !selectedCandidate) return;
+      const invalid = collectInvalidMoveLinks();
+      if (invalid.length > 0) {
+        const proceed = confirm(
+          `These move references look invalid for this board: ${invalid.join(", ")}\n\nSave anyway?`
+        );
+        if (!proceed) {
+          $("status").textContent = `Fix invalid move links: ${invalid.join(", ")}`;
+          return;
+        }
+      }
       const annotation = {
         position_id: currentPosition.id,
         move: $("move").value,
@@ -668,8 +940,12 @@ INDEX_HTML = r"""<!doctype html>
 
     $("load-random").onclick = loadRandom;
     $("save").onclick = saveAnnotation;
+    $("insert-move-link").onclick = enterPickMode;
     $("refresh-analysis").onclick = refreshAnalysis;
     $("reset-line").onclick = resetLine;
+    trackAnnotationFocus();
+    setupContextMenu();
+    setupKeyboard();
     loadRandom();
   </script>
 </body>
